@@ -94,6 +94,44 @@ const server = http.createServer(async (req, res) => {
         res.statusCode = 404;
         return res.end("This endpoint doesn't exist");
       }
+    } else if (req.method === 'POST') {
+      if (pathName.startsWith('/files/')) {
+        const currentFolder = process.cwd();
+        const filename = pathName.substring('/files/'.length);
+        const filepath = path.join(currentFolder, filename);
+
+        if (!filename || filename.trim() === '') {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'Nom de fichier manquant ou invalide.' }));
+        }
+
+        const writeStream = fs.createWriteStream(filepath);
+        req.pipe(writeStream);
+
+        writeStream.on('finish', () => {
+          res.statusCode = 201;
+          res.end(JSON.stringify({ message: `Fichier "${filename}" créé avec succès.` }));
+        });
+
+        writeStream.on('error', (err) => {
+          console.error(`Erreur lors de l'écriture du fichier "${filename}" via stream :`, err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: `Erreur lors de la création du fichier "${filename}"`, details: err.message }));
+          } else {
+            res.end();
+          }
+        });
+
+        req.on('error', (reqErr) => {
+          console.error(`Erreur sur le stream de requête POST pour "${filename}" :`, reqErr);
+          writeStream.destroy();
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: `Erreur de lecture du corps de la requête : ${reqErr.message}` }));
+          }
+        });
+      }
     }
 
   } catch (error) {
