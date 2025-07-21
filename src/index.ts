@@ -63,6 +63,33 @@ const server = http.createServer(async (req, res) => {
           currentFolder,
           files: statFiles,
         }));
+      } else if (pathName.startsWith('/files/')) {
+        const filename = pathName.substring('/files/'.length);
+        const currentFolder = process.cwd();
+        const filepath = path.join(currentFolder, filename);
+        try {
+          const statFile = await statPromise(filepath);
+          if (!statFile.isFile()) {
+            res.statusCode = 400;
+            return res.end(JSON.stringify({ error: `"${filename}" n'est pas un fichier.` }));
+          }
+
+          const readStream = fs.createReadStream(filepath);
+
+          readStream.on('error', (streamErr) => {
+            console.error(`Erreur de lecture du stream pour "${filename}" :`, streamErr);
+            if (!res.headersSent) {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.statusCode = 500;
+              return res.end(JSON.stringify({ error: `Erreur de streaming pour "${filename}"`, details: streamErr.message }));
+            } else {
+              return res.end();
+            }
+          });
+          readStream.pipe(res);
+        } catch (error) {
+          return res.end(JSON.stringify({ name: filename, error: `Impossible d'obtenir les stats : ${(error as Error).message}` }));
+        }
       } else {
         res.statusCode = 404;
         return res.end("This endpoint doesn't exist");
